@@ -5,6 +5,8 @@
  * 用于测试 Ollama API Pool 的核心功能
  */
 
+import { writeFileSync } from 'fs';
+
 const API_BASE_URL = process.env.API_BASE_URL || 'https://ollama-api-pool.h7ml.workers.dev';
 const API_TOKEN = process.env.API_TOKEN || '';
 
@@ -459,8 +461,7 @@ async function main() {
 
   // 输出 GitHub Comment 到文件（供 GitHub Action 使用）
   if (process.env.GITHUB_OUTPUT) {
-    const fs = require('fs');
-    fs.writeFileSync('test-report.md', githubComment);
+    writeFileSync('test-report.md', githubComment);
     log('\n✓ 测试报告已保存到 test-report.md', 'success');
   }
 
