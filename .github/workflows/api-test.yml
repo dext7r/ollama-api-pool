@@ -60,62 +60,50 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-      - name: 💬 评论到 PR
-        if: github.event_name == 'pull_request'
+      - name: 💬 发布测试报告
+        if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const report = `${{ steps.read-report.outputs.report }}`;
 
-            // 查找已存在的评论
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.data.find(comment =>
-              comment.user.type === 'Bot' &&
-              comment.body.includes('API 接口测试报告')
-            );
-
-            if (botComment) {
-              // 更新已存在的评论
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: report
-              });
-            } else {
-              // 创建新评论
-              await github.rest.issues.createComment({
+            if (context.eventName === 'pull_request') {
+              // PR 评论
+              const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: report
               });
-            }
 
-      - name: 💬 评论到 Commit
-        if: github.event_name == 'push'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const report = `${{ steps.read-report.outputs.report }}`;
+              const botComment = comments.data.find(comment =>
+                comment.user.type === 'Bot' &&
+                comment.body.includes('API 接口测试报告')
+              );
 
-            try {
-              await github.rest.repos.createCommitComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: context.sha,
-                body: report
-              });
-              console.log('✓ 测试报告已添加到 commit 评论');
-            } catch (error) {
-              console.error('创建 commit 评论失败:', error);
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: report
+                });
+                console.log('✓ 已更新 PR 测试报告评论');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: report
+                });
+                console.log('✓ 已创建 PR 测试报告评论');
+              }
+            } else {
+              // Push 事件：输出到 Summary
+              await core.summary
+                .addRaw(report)
+                .write();
+              console.log('✓ 测试报告已添加到 GitHub Summary');
             }
 
       - name: 📤 上传测试报告
