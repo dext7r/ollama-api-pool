@@ -1,15 +1,18 @@
 name: API 接口测试
 
 on:
-  push:
-    branches:
-      - main
-      - openrouter
   pull_request:
     branches:
       - main
       - openrouter
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy to Cloudflare Workers"]
+    types:
+      - completed
+    branches:
+      - main
+      - openrouter
   schedule:
     # 每天 UTC 时间 00:00 运行（北京时间 08:00）
     - cron: '0 0 * * *'
@@ -17,8 +20,12 @@ on:
 jobs:
   api-test:
     runs-on: ubuntu-latest
+    # 仅在 deploy 成功后运行，或者是 PR/手动触发/定时任务
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
 
@@ -42,72 +49,96 @@ jobs:
           node scripts/api-test.js || echo "test_failed=true" >> $GITHUB_OUTPUT
         continue-on-error: true
 
-      - name: 📊 读取测试报告
-        id: read-report
-        run: |
-          if [ -f test-report.md ]; then
-            echo "报告文件存在，读取内容..."
-            {
-              echo "report<<EOFMARKER"
-              cat test-report.md
-              echo "EOFMARKER"
-            } >> $GITHUB_OUTPUT
-          else
-            echo "报告文件不存在，生成默认报告..."
-            {
-              echo "report<<EOFMARKER"
-              echo "## ❌ API 接口测试失败"
-              echo ""
-              echo "测试脚本执行失败，未生成测试报告。请检查日志。"
-              echo "EOFMARKER"
-            } >> $GITHUB_OUTPUT
-          fi
+      - name: 💬 发布测试报告（PR 评论）
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORG_TOKEN }}
+          script: |
+            const fs = require('fs');
 
-      - name: 💬 发布测试报告
-        if: always()
+            let report = '';
+            if (fs.existsSync('test-report.md')) {
+              report = fs.readFileSync('test-report.md', 'utf8');
+            } else {
+              report = `## ❌ API 接口测试失败\n\n测试脚本执行失败，未生成测试报告。请检查日志。`;
+            }
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('API 接口测试报告')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: report
+              });
+              console.log('✓ 已更新 PR 测试报告评论');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+              console.log('✓ 已创建 PR 测试报告评论');
+            }
+
+      - name: 💬 发布测试报告（Push Summary）
+        if: always() && github.event_name == 'workflow_run'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const report = `${{ steps.read-report.outputs.report }}`;
+            const fs = require('fs');
 
-            if (context.eventName === 'pull_request') {
-              // PR 评论
-              const comments = await github.rest.issues.listComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-              });
-
-              const botComment = comments.data.find(comment =>
-                comment.user.type === 'Bot' &&
-                comment.body.includes('API 接口测试报告')
-              );
-
-              if (botComment) {
-                await github.rest.issues.updateComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  comment_id: botComment.id,
-                  body: report
-                });
-                console.log('✓ 已更新 PR 测试报告评论');
-              } else {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  body: report
-                });
-                console.log('✓ 已创建 PR 测试报告评论');
-              }
+            let report = '';
+            if (fs.existsSync('test-report.md')) {
+              report = fs.readFileSync('test-report.md', 'utf8');
             } else {
-              // Push 事件：输出到 Summary
-              await core.summary
-                .addRaw(report)
-                .write();
-              console.log('✓ 测试报告已添加到 GitHub Summary');
+              report = `## ❌ API 接口测试失败\n\n测试脚本执行失败，未生成测试报告。请检查日志。`;
             }
+
+            await core.summary
+              .addRaw(report)
+              .write();
+            console.log('✓ 测试报告已添加到 GitHub Summary');
+
+      - name: 💬 发布测试报告（Commit 评论）
+        if: always() && github.event_name == 'workflow_run'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORG_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let report = '';
+            if (fs.existsSync('test-report.md')) {
+              report = fs.readFileSync('test-report.md', 'utf8');
+            } else {
+              report = `## ❌ API 接口测试失败\n\n测试脚本执行失败，未生成测试报告。请检查日志。`;
+            }
+
+            // 获取触发工作流的 commit SHA
+            const commitSha = context.payload.workflow_run.head_sha;
+
+            // 发布 commit 评论
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: commitSha,
+              body: report
+            });
+            console.log('✓ 测试报告已发布到 commit 评论');
 
       - name: 📤 上传测试报告
         if: always()

@@ -338,7 +338,113 @@ async function testChatCompletionStream() {
 }
 
 /**
- * 测试 5: 错误处理 - 无效的 Token
+ * 测试 5: 使用模板进行对话测试
+ */
+async function testChatWithTemplate() {
+  if (!API_TOKEN) {
+    throw new Error('未设置 API_TOKEN 环境变量，跳过需要授权的测试');
+  }
+
+  // 获取模板
+  const templatesResponse = await fetch(`${API_BASE_URL}/api/test-templates`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'Cache-Control': 'no-store'
+    }
+  });
+
+  if (!templatesResponse.ok) {
+    throw new Error('无法获取测试模板');
+  }
+
+  const templatesData = await templatesResponse.json();
+
+  if (!templatesData.templates || templatesData.templates.length === 0) {
+    throw new Error('没有可用的测试模板');
+  }
+
+  const firstTemplate = templatesData.templates[0];
+  log(`  └─ 使用模板: ${firstTemplate.label}`, 'info');
+
+  // 获取可用模型
+  const modelsResponse = await fetch(`${API_BASE_URL}/v1/models`, {
+    method: 'GET'
+  });
+
+  if (!modelsResponse.ok) {
+    throw new Error('无法获取模型列表');
+  }
+
+  const modelsData = await modelsResponse.json();
+
+  if (!modelsData.data || modelsData.data.length === 0) {
+    throw new Error('没有可用的模型');
+  }
+
+  const modelId = modelsData.data[0].id;
+  log(`  └─ 使用模型: ${modelId}`, 'info');
+
+  // 构建请求体（使用模板）
+  const requestBody = {
+    model: modelId,
+    messages: [
+      {
+        role: 'system',
+        content: firstTemplate.systemPrompt
+      },
+      {
+        role: 'user',
+        content: firstTemplate.userMessage
+      }
+    ],
+    temperature: firstTemplate.temperature,
+    stream: false
+  };
+
+  const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${API_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+
+  // 验证响应结构
+  if (!data.choices || !Array.isArray(data.choices)) {
+    throw new Error('响应格式错误：缺少 choices 数组');
+  }
+
+  if (data.choices.length === 0) {
+    throw new Error('响应中没有选择项');
+  }
+
+  const firstChoice = data.choices[0];
+
+  if (!firstChoice.message || !firstChoice.message.content) {
+    throw new Error('响应格式错误：缺少消息内容');
+  }
+
+  if (!data.usage) {
+    throw new Error('响应格式错误：缺少 usage 信息');
+  }
+
+  log(`  └─ 模板场景: ${firstTemplate.description}`, 'info');
+  log(`  └─ 响应长度: ${firstChoice.message.content.length} 字符`, 'info');
+  log(`  └─ Token 使用: ${data.usage.total_tokens}`, 'info');
+  log(`  └─ 响应预览: ${firstChoice.message.content.substring(0, 50)}...`, 'info');
+}
+
+/**
+ * 测试 6: 错误处理 - 无效的 Token
  */
 async function testInvalidToken() {
   const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
@@ -451,6 +557,7 @@ async function main() {
   await runTest('获取测试模板', testGetTemplates);
   await runTest('Chat Completion (非流式)', testChatCompletion);
   await runTest('Chat Completion (流式)', testChatCompletionStream);
+  await runTest('使用模板进行对话测试', testChatWithTemplate);
   await runTest('错误处理 - 无效 Token', testInvalidToken);
 
   // 生成报告
