@@ -47,17 +47,20 @@ jobs:
         run: |
           if [ -f test-report.md ]; then
             echo "报告文件存在，读取内容..."
-            # 将多行内容写入 GITHUB_OUTPUT
-            echo "report<<EOF" >> $GITHUB_OUTPUT
-            cat test-report.md >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "report<<EOFMARKER"
+              cat test-report.md
+              echo "EOFMARKER"
+            } >> $GITHUB_OUTPUT
           else
             echo "报告文件不存在，生成默认报告..."
-            echo "report<<EOF" >> $GITHUB_OUTPUT
-            echo "## ❌ API 接口测试失败" >> $GITHUB_OUTPUT
-            echo "" >> $GITHUB_OUTPUT
-            echo "测试脚本执行失败，未生成测试报告。请检查日志。" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "report<<EOFMARKER"
+              echo "## ❌ API 接口测试失败"
+              echo ""
+              echo "测试脚本执行失败，未生成测试报告。请检查日志。"
+              echo "EOFMARKER"
+            } >> $GITHUB_OUTPUT
           fi
 
       - name: 💬 发布测试报告
