@@ -55,7 +55,26 @@ jobs:
 
           [vars]
           ADMIN_TOKEN = "${{ secrets.ADMIN_TOKEN }}"
+
+          # 功能开关
           ENABLE_ANALYTICS = "true"
+          ENABLE_RATE_LIMIT = "true"
+          ENABLE_BOT_DETECTION = "true"
+          DISABLE_KV_STORAGE = "true"
+
+          # 速率限制配置
+          RATE_LIMIT_REQUESTS = "60"
+          RATE_LIMIT_WINDOW = "60"
+
+          # 统计采样率
+          STATS_SAMPLE_RATE = "0.1"
+          MODEL_STATS_SAMPLE_RATE = "0.2"
+
+          # 外部存储与缓存
+          REDIS_URL = "${{ secrets.OLLAMA_API_POOL_REDIS_URL }}"
+          DATABASE_URL = "${{ secrets.OLLAMA_API_POOL_DATABASE_URL }}"
+          SUPABASE_REST_URL = "${{ secrets.OLLAMA_API_POOL_SUPABASE_REST_URL }}"
+          SUPABASE_SERVICE_ROLE_KEY = "${{ secrets.OLLAMA_API_POOL_SUPABASE_SERVICE_ROLE_KEY }}"
 
           [observability.logs]
           enabled = false
@@ -64,26 +83,8 @@ jobs:
       - name: Deploy to Cloudflare Workers
         run: pnpm wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # 需要有 wrangler 权限
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }} # 你的 Cloudflare 账号 ID
-          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }} # 管理员令牌，用于保护管理接口
-          # 功能开关（根据需要调整）
-          ENABLE_ANALYTICS: "true"        # 统计分析：true=启用采样写入，false=禁用
-          ENABLE_RATE_LIMIT: "true"      # IP速率限制：true=启用（消耗KV读取），false=禁用（推荐）
-          ENABLE_BOT_DETECTION: "true"    # Bot检测：true=启用（仅日志，无KV消耗），false=禁用
-          DISABLE_KV_STORAGE: "true"      # 禁用 Cloudflare KV 写入，改由 Redis/Postgres 承担
-          # 速率限制配置（仅当 ENABLE_RATE_LIMIT=true 时生效）
-          RATE_LIMIT_REQUESTS: "60"       # 每个IP每分钟最大请求数
-          RATE_LIMIT_WINDOW: "60"         # 时间窗口（秒）
-
-          # 统计采样率（仅当 ENABLE_ANALYTICS=true 时生效）
-          STATS_SAMPLE_RATE: "0.1"        # 全局统计采样率（0.0-1.0），0.1=10%采样
-          MODEL_STATS_SAMPLE_RATE: "0.2"  # 模型统计采样率（0.0-1.0），0.2=20%采样
-          # 外部存储与缓存
-          REDIS_URL:  ${{ secrets.OLLAMA_API_POOL_REDIS_URL }}  # Redis URL
-          DATABASE_URL:  ${{ secrets.OLLAMA_API_POOL_DATABASE_URL }} # Postgres 连接字符串
-          SUPABASE_REST_URL:  ${{ secrets.OLLAMA_API_POOL_SUPABASE_REST_URL }} # Supabase REST URL
-          SUPABASE_SERVICE_ROLE_KEY:  ${{ secrets.OLLAMA_API_POOL_SUPABASE_SERVICE_ROLE_KEY }} # Supabase 服务角色密钥
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Output deployment URL
         run: |
