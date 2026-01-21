@@ -61,7 +61,7 @@
   },
   "packageManager": "pnpm@8.15.0",
   "dependencies": {
-    "wrangler": "^4.42.1"
+    "wrangler": "^4.59.1"
   },
   "funding": {
     "type": "github",
